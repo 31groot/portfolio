@@ -1,0 +1,43 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Pages serves this at 31groot.github.io/portfolio/, not at the domain
+      # root the way Vercel does, so the build needs the /portfolio/ base path
+      # and the router needs to know it too. The source stays unchanged, so
+      # the Vercel site keeps working exactly as it does now.
+      - run: sed -i 's|<BrowserRouter>|<BrowserRouter basename="/portfolio">|' src/App.jsx
+      - run: npm run build -- --base=/portfolio/
+      # GitHub Pages has no server rewrites, so serve the app itself for
+      # unknown paths (e.g. a direct visit to /portfolio/projects).
+      - run: cp dist/index.html dist/404.html && touch dist/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
